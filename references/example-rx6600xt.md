@@ -60,11 +60,21 @@ Picked 34: same speed as 33, with 460 MB more headroom for the desktop.
 Qwen3.6 needs HIP and Gemma needs Vulkan. A build with `-DGGML_HIP=ON -DGGML_VULKAN=ON` exposes `ROCm0` and `Vulkan0`. With per-preset `device =`, both run at full speed from one llama-server router (parity: Qwen3.6 585 / 27.7 vs 594 / 27.9; Gemma 306 / 25.8 vs 306 / 27.3).
 
 ## C3: Real OpenCode tasks, Qwen3.6
-| Config | Passed | Mean wall time | pp | tg |
-|---|---|---|---|---|
-| Tuned (HIP, ncmoe 34, ub 2048, f16, t 8) | **6/6** | 247 s | 190–530 | 26.3–28.0 |
+Same 6 tasks, one run each, 30-minute limit:
 
-The long audit task read 113K prompt tokens with 110 tool calls in one session.
+| Task | Baseline (Vulkan, ncmoe 33, ub 512, q8_0) | Tuned (HIP, ncmoe 34, ub 2048, f16, t 8) |
+|---|---|---|
+| Fix failing test | 174 s, pass | **87 s**, pass |
+| Add feature + tests | 140 s, pass | 160 s, pass |
+| Multi-file rename | 254 s, pass | **141 s**, pass |
+| Stack-trace fix | 127 s, pass | **64 s**, pass |
+| Read then edit | 130 s, pass | 128 s, pass |
+| Long audit (30 modules) | 689 s, **fail** (gave up after 44 tool calls) | **746 s, pass** (79 tool calls, 94K prompt tokens) |
+| **Passed** | 5/6 | **6/6** |
+| pp during tasks | 116–191 t/s | 190–534 t/s |
+| tg during tasks | 20.9–22.3 t/s | 26.3–28.0 t/s |
+
+Tasks with long prompts finish about 2× faster; short tasks are dominated by generation and by run-to-run variation in how the model approaches them. Single runs, so treat differences under about 20% as noise.
 
 ## Final Qwen3.6 config
 `device = ROCm0`, `ngl 99`, `n-cpu-moe 34`, `c 65536`, `fa on`, `ub 2048`, `b 2048`, `ctk/ctv f16`, `t 8`, `np 1`.
