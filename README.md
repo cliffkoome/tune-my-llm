@@ -4,6 +4,30 @@ An agent skill that has your coding agent (Claude Code, OpenCode, Codex, …) **
 
 Most tuning advice is measured on an empty context with one short prompt. Coding agents don't work like that: every turn resends 12K+ tokens of system prompt and tools plus the whole conversation, and they compact near the end of the context. A config that wins at depth 0 can lose badly at 48K. This skill measures at your agent's real context depths, confirms that configs fit in a real server, and checks the result on real agent tasks before anything gets applied.
 
+## Quick start: one prompt
+
+Paste this into your coding agent (Claude Code, OpenCode, Codex, …). It installs the skill and runs everything itself:
+
+```text
+Install the agent skill from https://github.com/cliffkoome/tune-my-llm (clone it into your skills folder, or into
+~/tune-my-llm and read its SKILL.md if you don't support skills). Then use it to tune my local models.
+Start with the hardware inventory, then tell me what you found, the quick and comprehensive options,
+and how long each would take on my machine. After I pick one, run it autonomously to the end.
+Only stop to ask before using sudo, building software, or changing my live server or agent config.
+```
+
+You can name a mode up front ("do a quick tune" / "do a comprehensive tune") and the agent will still confirm the time estimate before starting.
+
+## How long it takes: two modes
+
+| | **Quick tune** (default) | **Comprehensive tune** |
+|---|---|---|
+| For | A big, safe win in about an hour | The best config your hardware can do, with evidence |
+| Does | Uses your existing llama.cpp build; sweeps batch size and cache type at your agent's max context; finds the MoE offload that fits; confirms in a real server; 2 short agent tasks per model to catch models that can't use tools | Everything: builds and compares every backend, all sweeps at 3–4 depths, speculative decoding, recorded-session replay, all 6 agent tasks before vs after |
+| Time | **20–40 min per model** (45–90 min for 2–3 models) | **1.5–3 h per model** (5–10 h for 3–4 models: run it overnight) |
+
+**Before anything runs, the agent tells you the estimate for your machine and waits for your OK.** Your GPU (and any model server you run) is busy for the whole run. A quick tune can be upgraded to comprehensive later without redoing its work.
+
 ## What your agent will do
 
 1. **Inventory:** GPU, VRAM, CPU cores, RAM size/speed/channels, PCIe link, llama.cpp builds, GGUF models (and whether they fit), Ollama. Flags hardware limits such as a single RAM stick or a narrow PCIe slot before tuning.
@@ -38,6 +62,9 @@ ln -s ~/.agents/skills/tune-my-llm ~/.claude/skills/tune-my-llm   # Claude Code
 Then ask your agent: *"Tune my local models for OpenCode"*, or use a ready-made prompt from [`PROMPTS.md`](PROMPTS.md) (full tune, re-check after an update, add one model, diagnose a slow model, measure only).
 
 Without skill support: clone the repo, open your agent in it, and say *"Read SKILL.md and follow it."*
+
+## Tested on
+The full workflow has been run end to end on **Linux with an AMD GPU** (RX 6600 XT 8 GB, ROCm/HIP and Vulkan) with OpenCode as the agent. The NVIDIA (CUDA), Apple (Metal) and Intel paths follow llama.cpp's documentation but **haven't been run yet**. Expect rough edges there, and please open an issue with what you hit. Other agents need an adapter in `scripts/bench_agentic.py` for the end-to-end tasks; everything else is agent-independent.
 
 ## Requirements
 - Linux or macOS, Python 3.10+, bash, git.

@@ -19,7 +19,30 @@ Read before starting:
 - **Don't trust a run you haven't checked.** After the first agentic task, inspect the run folder: did the agent edit the right files? Did the check really fail or pass? See gotchas.
 - Keep the user posted: one line per finished experiment with the key numbers.
 
+## Choose a mode and give a time estimate first
+Before any benchmark, run step 1 (inventory, ~2 minutes), then tell the user **which mode, what it will do, how long it should take, and that the GPU (and any live model server) will be busy the whole time**. Wait for a yes. If the user already named a mode, still state the estimate before starting.
+
+| | **Quick tune** (default) | **Comprehensive tune** |
+|---|---|---|
+| Goal | A big, safe win today | The best config this hardware can do, with evidence |
+| Builds | None: uses the llama.cpp builds already installed | Builds every possible backend from the same commit (asks first) |
+| Per model | Rule-of-thumb start (flags.md), one sweep of `-ub` × cache type at the max depth, MoE: lowest `--n-cpu-moe` that fits, confirmed in a real server | Steps 3–6 in full: backend comparison, all sweeps at 3–4 depths, drift checks, speculative decoding, replay |
+| Agent tasks | 2 short tasks (t1, t4) per agent model, tuned config only: catches models that can't use tools | All 6 tasks, old vs tuned config, for every agent model |
+| Typical time | **20–40 min per model**; 45–90 min for 2–3 models | **1.5–3 h per model**; 5–10 h for 3–4 models: run it overnight |
+
+Work out the estimate from this machine's inventory with these per-step costs (measured on an 8 GB GPU; faster GPUs are quicker, MoE models with CPU experts are the slowest):
+- Building a backend: 10–30 min each (HIP/CUDA are the slowest).
+- `micro.py` at 4 depths: 3–5 min per config for a dense ≤8B model, 10–15 min for a large MoE.
+- `validate_fill.py` up to full context: 3–6 min per config.
+- `bench_agentic.py`, all 6 tasks: 20–35 min per config for a capable model (set `TASK_TIMEOUT`; a weak model can loop until it). Tasks t1 + t4 only: 3–8 min.
+- `bench_replay.py`: ~15 min per config. `bench_general.py`: 2–5 min per config.
+
+Say it plainly, e.g. *"Quick tune of 3 models: about 1 hour 15 minutes, GPU busy throughout. Comprehensive: about 7 hours, best run overnight."* Report progress against the estimate as you go. A quick tune can be upgraded later: comprehensive mode reuses its results.
+
+**Autonomy.** Once the user agrees to the mode, run the whole thing without stopping for routine choices. Still stop for the safety rules above (sudo, builds, live services, the user's configs), and at the end present the prepared config and results for approval.
+
 ## Workflow
+Steps 1, 2, 7 and 8 apply to both modes. Quick mode does the reduced versions of steps 3–6 described in the table; comprehensive mode does them all.
 
 ### 1. Inventory
 - Run `scripts/detect_hw.sh [model dirs]`. Note the GPU, VRAM, physical cores, RAM (size, speed, module count), the PCIe link, available llama.cpp builds and their devices, GGUF files (flagged if too big for VRAM + RAM), and Ollama models.

@@ -2,9 +2,23 @@
 
 Copy one into your coding agent (Claude Code, OpenCode, Codex, …) with this skill installed. Replace the parts in `<angle brackets>`. Without skill support, start with: *"Read SKILL.md in <path to tune-my-llm> and follow it."*
 
-## Full tune (first time)
+## Install and run everything (one prompt)
 ```text
-Use the tune-my-llm skill to tune my local models for <OpenCode / Claude Code / my agent> on this machine.
+Install the agent skill from https://github.com/cliffkoome/tune-my-llm (clone it into your skills folder, or into
+~/tune-my-llm and read its SKILL.md if you don't support skills). Then use it to tune my local models.
+Start with the hardware inventory, then tell me what you found, the quick and comprehensive options,
+and how long each would take on my machine. After I pick one, run it autonomously to the end.
+Only stop to ask before using sudo, building software, or changing my live server or agent config.
+```
+
+## Quick tune (about an hour)
+```text
+Use tune-my-llm to do a quick tune of my local models for <OpenCode>. Tell me the time estimate first.
+```
+
+## Comprehensive tune (several hours; best overnight)
+```text
+Use the tune-my-llm skill to do a comprehensive tune of my local models for <OpenCode / Claude Code / my agent> on this machine.
 - Models: <all GGUFs in ~/models | just these: ...>
 - Main use: <agentic coding at 64K context>. Secondary: <chat, long documents, vision>.
 - Priority: <fastest at full context | most context that still fits | balance>.
