@@ -89,6 +89,23 @@ Live results after switching (through the router, long prompt):
 
 Machine notes from `detect_hw.sh`: 2 × 16 GB DDR4-3200 (dual channel, ~51 GB/s), GPU link PCIe 4.0 x8 (the card's full width; the card itself reports x16).
 
+## C4: Caching and speculation on a replayed OpenCode session (Qwen3.6)
+49 recorded OpenCode prompts replayed in order (`bench_replay.py`), including OpenCode's title requests, which evict the conversation from a single slot:
+
+| Tuned + | Total | Tokens read fresh |
+|---|---|---|
+| nothing | **845 s** | 177K |
+| `--spec-type ngram-mod` / `ngram-simple` | 854 / 829 s | 177K |
+| `--cache-ram 0` | 904 s (+7%) | 223K |
+| `-np 2 -kvu` | 840 s | 177K |
+| `--cache-reuse 256` | 839 s | 177K |
+
+The default RAM prompt cache already recovers what title requests evict. Nothing else helped beyond noise.
+
+## C5/C6: Other models
+- **Speculative decoding:** `ngram-mod` changed nothing on chat workloads. Gemma's own assistant draft (`draft-mtp`) **halved** generation speed (26 → 12–16 t/s, ~45% acceptance) and isn't a memory problem. Measure before enabling any draft.
+- **Real OpenCode tasks:** Gemma-4 12B passed 5/6 (the long audit hit the 20-minute limit). Qwen2.5-7B passed 2/6 (stopped early or looped). Qwen2.5-Coder-3B passed 0/6 and never made a tool call. Speed tuning can't fix a model that can't drive the agent; test this early so you don't tune a model the agent can't use.
+
 ## Final Qwen3.6 config
 `device = ROCm0`, `ngl 99`, `n-cpu-moe 34`, `c 65536`, `fa on`, `ub 2048`, `b 2048`, `ctk/ctv f16`, `t 8`, `np 1`.
 At 49K tokens: **pp 526 / tg 25.3**, against the original **pp 172 / tg 19.2** (Vulkan, ncmoe 33, ub 512, q8_0).

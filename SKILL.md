@@ -56,6 +56,7 @@ Then `scripts/table.py <label-prefix>` to compare, and confirm the top 2–3 con
 - Judge with `scripts/bench_agentic.py` and `scripts/bench_general.py`, not micro-benchmarks. Keep it only if wall time drops and the pass rate holds.
 
 ### 6. End-to-end check
+- Run at least the first two tasks for **every** model the user wants to use with their agent before spending long on tuning it: small or older models (e.g. Qwen2.5-Coder-3B) may never make a tool call, and no flag fixes that.
 - `scripts/bench_agentic.py <model> <backend> baseline 1 <old flags>` and `... tuned 1 <new flags>`, with `RECORD=1` once per model to capture prompts. Raise `TASK_TIMEOUT` (seconds) for slow models.
 - `scripts/bench_replay.py` to compare finalists on identical recorded traffic and see prompt-cache reuse.
 - `scripts/bench_general.py` for chat use (set `IMAGE=` for vision models).

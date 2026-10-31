@@ -30,6 +30,8 @@ Every item here broke a benchmark run or a server at least once, so they're wort
 - **The desktop uses VRAM too**, if the GPU drives a display. Leave a few hundred MB of headroom.
 
 ## Speed traps
+- **Draft models can make things slower.** Gemma-4 12B's own assistant draft halved generation on an 8 GB RX 6600 XT (~45% acceptance). Always A/B speculative decoding; never assume it helps.
+- **OpenCode's title requests evict the conversation** from a single-slot server every few turns. llama-server's RAM prompt cache (`--cache-ram`, on by default) restores it; turning it off cost 7% on a replayed session. Don't disable it.
 - **RAM speed and channels.** For MoE models with experts in RAM (`--n-cpu-moe`) and any partial offload, generation speed scales with memory bandwidth. A single DIMM (single channel) or XMP/EXPO turned off can cost 30–50%. `detect_hw.sh` prints module count and speed; mention it to the user before blaming the backend.
 - **PCIe link.** A large `-ub` streams CPU-side weights to the GPU for every prompt batch, so prompt speed depends on the link. A GPU in a chipset slot, a riser, or a laptop eGPU can run at x4 or less. `detect_hw.sh` reports the narrowest link in the chain (AMD cards report their internal switch as x16, which is misleading).
 - **Heat and power limits.** Laptops and small cases throttle under sustained load, so the last configs in a sweep look worse than the first. Rerun the first config at the end of a sweep; if it drifted more than ~5%, cool down and re-measure, or interleave configs.
