@@ -1,0 +1,32 @@
+[
+ {
+  "id": "t1_fix_test",
+  "prompt": "The test suite has a failing test. Run the tests with `python -m pytest -q`, find the cause in the source code (not the test), and fix it so all tests pass.",
+  "check": "python -m pytest -q"
+ },
+ {
+  "id": "t2_feature",
+  "prompt": "Add a method `search(self, tag: str) -> list[Product]` to `Inventory` in shop/inventory.py that returns products having that tag, sorted by sku. Add tests for it in tests/test_inventory.py and make sure they pass.",
+  "check": "grep -q search tests/test_inventory.py && python -m pytest -q tests/test_inventory.py $CHECKS/check_t2.py"
+ },
+ {
+  "id": "t3_rename",
+  "prompt": "Rename the function `calc_total` to `compute_total` everywhere in the project (definition, imports, calls and tests). Do not change any behaviour.",
+  "check": "! grep -rn calc_total shop tests && python -c 'from shop.pricing import compute_total' && python -m pytest -q tests/test_inventory.py && python -m pytest -q tests/test_pricing.py -k 'not percentage'"
+ },
+ {
+  "id": "t4_stacktrace",
+  "prompt": "Running `python -m shop.cli report` crashes with this error:\n\nTraceback (most recent call last):\n  File \"shop/cli.py\", line 30, in <module>\n    sys.exit(main(sys.argv))\n  File \"shop/cli.py\", line 23, in main\n    for customer, total in sorted(revenue_by_customer(demo_service()).items()):\n  File \"shop/report.py\", line 8, in revenue_by_customer\n    revenue[order.customer] += calc_total(order)\nKeyError: 'alice'\n\nFind the root cause and fix it so the report prints a total per customer.",
+  "check": "python -m shop.cli report | grep -q '^alice: ' && python -m shop.cli report | grep -q '^bob: '"
+ },
+ {
+  "id": "t5_explain_edit",
+  "prompt": "Read shop/orders.py and shop/inventory.py. Add a method `cancel(self, order_id: str) -> None` to `OrderService` that puts every item's quantity back into the inventory and removes the order. It must raise KeyError for an unknown order id. Then explain in two or three sentences how an order flows through the code.",
+  "check": "python -m pytest -q $CHECKS/check_t5.py"
+ },
+ {
+  "id": "t6_long_audit",
+  "prompt": "Audit every module in shop/legacy. Read each file. Write docs/LEGACY.md with one line per module: the module name and a short description of what it does. Several of the `normalize_*_code` functions do not lowercase their result even though their docstring says they should; fix every one of them.",
+  "check": "python -m pytest -q $CHECKS/check_t6.py"
+ }
+]

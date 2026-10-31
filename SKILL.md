@@ -1,0 +1,80 @@
+---
+name: tune-my-llm
+description: Benchmark and tune local LLMs served with llama.cpp (llama-server) for the machine they run on, with coding agents like OpenCode as the main workload. Finds the best backend per model (CUDA, HIP/ROCm, Vulkan, Metal), batch sizes, KV cache type, MoE expert offload, threads and speculative decoding, measured at the context depths a coding agent really reaches, confirmed in a real server and on real agent tasks, then applied and documented. Use when the user wants to speed up, benchmark, tune or optimise local models, compare backends, pick llama-server flags, or set up a multi-model llama-server router.
+---
+
+# Tune my LLM
+
+You're tuning the user's local models on their own hardware. The goal is the fastest **working** config for each model under the user's real workload, usually a coding agent. Every claim must come from a measurement on this machine. Today's defaults and other people's numbers are starting points only.
+
+Read before starting:
+- `references/methodology.md`: why to measure at depth, agent compaction maths, the test ladder.
+- `references/gotchas.md`: pitfalls that silently corrupt results. Read it fully before running anything.
+- Then, as needed: `references/flags.md` (what to sweep and what's settled), `references/backends.md` (build recipes), `references/example-rx6600xt.md` (a complete worked example).
+
+## Safety rules
+- **Ask before** using sudo, changing a running service, editing the user's agent or server config, installing packages or building large projects. Prepare the change, show it, and apply it once approved.
+- **Never kill processes by pattern** (`pkill -f`, `killall`): the pattern can match your own shell. Kill by PID.
+- **One test server at a time**, on a spare port (config `port`, default 8090). The user's live server stays untouched, except that you unload its models (`router_url`) so the GPU is free. Tell the user the GPU will be busy.
+- **Don't trust a run you haven't checked.** After the first agentic task, inspect the run folder: did the agent edit the right files? Did the check really fail or pass? See gotchas.
+- Keep the user posted: one line per finished experiment with the key numbers.
+
+## Workflow
+
+### 1. Inventory
+- Run `scripts/detect_hw.sh [model dirs]`. Note the GPU, VRAM, physical cores, RAM, available llama.cpp builds and their devices, GGUF files, and Ollama models.
+- Ask the user, if not already clear:
+  - their main workload (which coding agent? chat?)
+  - which models matter
+  - the context size their agent needs
+  - whether a live llama-server/router or Ollama is running
+- Copy `config.example.json` to a working folder as `config.json`. Fill in the models (alias, path, mmproj/draft, ctx), the backends (binary paths and env), `router_url` if they run a llama-server router, and `agent.python_bin_dir` (a venv with `pytest` for the agentic checks). Set `TUNE_CONFIG` to point at it. Results go to `results_dir`.
+
+### 2. Agent profile
+Work out the agent's context range: base prompt, compaction trigger, what's kept (see methodology.md; for OpenCode with 64K, ~12K → ~49.5K). Pick 3–4 depths inside that range. **All later measurements use these depths, not depth 0 alone.**
+
+### 3. Backend check
+- If more than one GPU backend is possible, build them **from the same commit** (backends.md) after asking. A combined build (e.g. `-DGGML_HIP=ON -DGGML_VULKAN=ON`) lets one router serve different models on different backends.
+- For each model: `scripts/micro.py <backend> C1-<model> <model> -ngl 99 [-ncmoe N] -fa 1 -p 4096 -n 128 -d <depths> -r 1`.
+- Decide **per model**. MoE models with CPU experts and dense models can prefer different backends.
+
+### 4. Parameter sweeps (micro.py, then confirm)
+For each model on its chosen backend, at a mid and a max depth:
+1. `-ub 512,1024,2048` (`-b 2048`). Prompt speed vs VRAM.
+2. `-ctk f16,q8_0 -ctv f16,q8_0`. Generation speed vs VRAM.
+3. MoE only: `--n-cpu-moe` from tight to loose, **together with** the best `-ub` and cache type, at the max depth.
+4. MoE / CPU-heavy: `-t` = 4, 6, physical cores, logical cores.
+5. Note any out-of-memory failures; they mark the boundary.
+
+Then `scripts/table.py <label-prefix>` to compare, and confirm the top 2–3 configs with `scripts/validate_fill.py <model> <backend> <label> <depths> <server args>` at the full `-c`. Pick the fastest that fits with **a few hundred MB of VRAM headroom**.
+
+### 5. Speculative decoding
+- Check GGUF metadata for MTP/nextn tensors or a matching assistant/draft model (flags.md).
+- Try what's available: `draft-mtp` with an assistant model; `ngram-mod` for every model.
+- Judge with `scripts/bench_agentic.py` and `scripts/bench_general.py`, not micro-benchmarks. Keep it only if wall time drops and the pass rate holds.
+
+### 6. End-to-end check
+- `scripts/bench_agentic.py <model> <backend> baseline 1 <old flags>` and `... tuned 1 <new flags>`, with `RECORD=1` once per model to capture prompts. Raise `TASK_TIMEOUT` (seconds) for slow models.
+- `scripts/bench_replay.py` to compare finalists on identical recorded traffic and see prompt-cache reuse.
+- `scripts/bench_general.py` for chat use (set `IMAGE=` for vision models).
+- Compare pass rate, wall time, pp and tg. A config that's faster but fails more tasks is not a win.
+
+### 7. Apply (with approval)
+- Write the router presets (flags.md has a template: per-model `device =`, no `:` in names). Show the service or startup command, and the agent config entries (context limits must match `c`).
+- Prepare the files, show the diff, and let the user install anything that needs sudo.
+- Restart, then verify every model answers through the user's real endpoint at the expected speed.
+
+### 8. Document
+Write a results file for the user, modelled on `references/example-rx6600xt.md`:
+- the hardware
+- the agent profile
+- each experiment, with what was tested, a table and the verdict
+- the final config, before vs after
+- what changed where, and how to undo it
+
+## Decision rules of thumb (confirm by measuring)
+- Agents re-read long prompts every turn, so **prompt speed at depth matters as much as generation speed**.
+- Bigger `-ub` mostly helps MoE models with CPU experts; dense models fully on the GPU barely change.
+- f16 cache beats q8_0 for speed when it fits; q8_0 is the floor for agents.
+- Fewer CPU-offloaded MoE layers is faster only until VRAM runs out; then everything collapses.
+- If the GPU drives the display, keep headroom for it.
