@@ -19,6 +19,17 @@ echo "Use physical cores for -t; logical (SMT) threads can halve MoE generation 
 
 section "RAM"
 if command -v free >/dev/null; then free -h | sed -n 1,2p; else echo "$(( $(sysctl -n hw.memsize) / 1073741824 )) GiB"; fi
+# Speed and populated slots matter for MoE models and partial offload: CPU-side weights are read
+# from RAM for every token, so generation speed scales with memory bandwidth.
+if command -v udevadm >/dev/null; then
+  udevadm info -e 2>/dev/null | awk -F= '
+    /MEMORY_DEVICE_[0-9]+_SIZE=/ {split($1,a,"_"); size[a[3]]=$2}
+    /MEMORY_DEVICE_[0-9]+_CONFIGURED_SPEED_MTS=/ {split($1,a,"_"); spd[a[3]]=$2}
+    /MEMORY_DEVICE_[0-9]+_TYPE=/ {split($1,a,"_"); typ[a[3]]=$2}
+    END {n=0; for (i in size) if (size[i]>0) {n++; printf "DIMM: %d GiB %s @ %s MT/s\n", size[i]/1073741824, typ[i], spd[i]; s=spd[i]}
+         if (n) printf "%d module(s) populated. Rough peak bandwidth if dual channel: %.0f GB/s (1 module = single channel, half that)\n", n, (n>=2?2:1)*s*8/1000}'
+fi
+echo "Note: XMP/EXPO off (RAM at 2133/2400 instead of its rated speed) or a single module can cut MoE generation speed by 30-50%."
 
 section "GPU"
 if command -v nvidia-smi >/dev/null; then
@@ -42,6 +53,22 @@ if command -v rocminfo >/dev/null; then
     : "${HSA_OVERRIDE_GFX_VERSION:=$suggested}"
   fi
 fi
+# PCIe link: matters when weights or experts live in RAM (large -ub streams them to the GPU).
+# AMD cards contain an internal switch that reports x16; the narrowest link up the chain is the real one.
+for card in /sys/class/drm/card[0-9]; do
+  [[ -e $card/device ]] || continue
+  d=$(readlink -f "$card/device"); narrow=""
+  while [[ $d == /sys/devices/* ]]; do
+    if [[ -f $d/current_link_width ]]; then
+      w=$(cat "$d/current_link_width"); sp=$(cat "$d/current_link_speed")
+      [[ -z $narrow || $w -lt ${narrow%%|*} ]] && narrow="$w|$sp|$(cat "$d/max_link_width")"
+    fi
+    d=$(dirname "$d")
+  done
+  [[ -n $narrow ]] && IFS='|' read -r w sp mw <<<"$narrow" && echo "$(basename "$card") PCIe link: x$w @ $sp (narrowest in chain). If the GPU sits in a chipset slot or a riser, this can be far below the card's own spec."
+  pl=$card/device/power_dpm_force_performance_level
+  [[ -f $pl ]] && echo "$(basename "$card") power level: $(cat "$pl") (auto is fine; 'low' or a laptop power-saver profile skews results)"
+done
 [[ $(uname) == Darwin ]] && system_profiler SPDisplaysDataType 2>/dev/null | grep -E 'Chipset|Metal|Memory'
 
 section "llama.cpp builds"
@@ -54,11 +81,16 @@ for b in "${bins[@]}"; do
 done
 [[ ${#bins[@]} -eq 0 ]] && echo "none found: see references/backends.md to build one"
 
-section "GGUF models"
+section "GGUF models (size vs memory)"
+vram_mib=0
+for f in /sys/class/drm/card*/device/mem_info_vram_total; do [[ -f $f ]] && vram_mib=$(( $(cat "$f") / 1048576 )); done
+command -v nvidia-smi >/dev/null && vram_mib=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
+avail_mib=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+echo "VRAM ${vram_mib} MiB, RAM available ${avail_mib:-?} MiB. Models bigger than VRAM + ~80% of available RAM will swap or fail; flagged below."
 dirs=("$@"); [[ ${#dirs[@]} -eq 0 ]] && dirs=(~/models ~/.cache/llama.cpp ~/.cache/huggingface)
 for d in "${dirs[@]}"; do
   [[ -d $d ]] && find "$d" -type f -name '*.gguf' -size +50M -printf '%10s  %p\n' 2>/dev/null \
-    | awk '{printf "%7.2f GB  %s\n", $1/1e9, $2}'
+    | awk -v lim="$(( vram_mib + ${avail_mib:-0} * 8 / 10 ))" '{f=($1/1048576 > lim && lim > 0) ? "  <-- too big for VRAM+RAM" : ""; printf "%7.2f GB  %s%s\n", $1/1e9, $2, f}'
 done
 
 section "Ollama"

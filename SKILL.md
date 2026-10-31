@@ -22,7 +22,8 @@ Read before starting:
 ## Workflow
 
 ### 1. Inventory
-- Run `scripts/detect_hw.sh [model dirs]`. Note the GPU, VRAM, physical cores, RAM, available llama.cpp builds and their devices, GGUF files, and Ollama models.
+- Run `scripts/detect_hw.sh [model dirs]`. Note the GPU, VRAM, physical cores, RAM (size, speed, module count), the PCIe link, available llama.cpp builds and their devices, GGUF files (flagged if too big for VRAM + RAM), and Ollama models.
+- Tell the user about anything that caps performance before tuning starts: one RAM module or RAM below its rated speed, a narrow PCIe link, a power-saver profile, VRAM already used by other apps. These can matter more than any flag.
 - Ask the user, if not already clear:
   - their main workload (which coding agent? chat?)
   - which models matter
@@ -45,6 +46,7 @@ For each model on its chosen backend, at a mid and a max depth:
 3. MoE only: `--n-cpu-moe` from tight to loose, **together with** the best `-ub` and cache type, at the max depth.
 4. MoE / CPU-heavy: `-t` = 4, 6, physical cores, logical cores.
 5. Note any out-of-memory failures; they mark the boundary.
+6. End each sweep by rerunning its first config (drift check, methodology.md).
 
 Then `scripts/table.py <label-prefix>` to compare, and confirm the top 2–3 configs with `scripts/validate_fill.py <model> <backend> <label> <depths> <server args>` at the full `-c`. Pick the fastest that fits with **a few hundred MB of VRAM headroom**.
 
@@ -62,7 +64,7 @@ Then `scripts/table.py <label-prefix>` to compare, and confirm the top 2–3 con
 ### 7. Apply (with approval)
 - Write the router presets (flags.md has a template: per-model `device =`, no `:` in names). Show the service or startup command, and the agent config entries (context limits must match `c`).
 - Prepare the files, show the diff, and let the user install anything that needs sudo.
-- Restart, then verify every model answers through the user's real endpoint at the expected speed.
+- Restart, then verify every model answers through the user's real endpoint at the expected speed, at a long prompt, with mmproj loaded for vision models (send a real image).
 
 ### 8. Document
 Write a results file for the user, modelled on `references/example-rx6600xt.md`:

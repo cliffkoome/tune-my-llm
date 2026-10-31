@@ -6,7 +6,7 @@ Most tuning advice is measured on an empty context with one short prompt. Coding
 
 ## What your agent will do
 
-1. **Inventory:** GPU, VRAM, CPU cores, RAM, llama.cpp builds, GGUF models, Ollama.
+1. **Inventory:** GPU, VRAM, CPU cores, RAM size/speed/channels, PCIe link, llama.cpp builds, GGUF models (and whether they fit), Ollama. Flags hardware limits such as a single RAM stick or a narrow PCIe slot before tuning.
 2. **Agent profile:** your agent's real context range, e.g. OpenCode at 64K lives between ~12K and ~49.5K tokens.
 3. **Backend check:** CUDA / HIP / Vulkan / Metal built from the same commit, compared per model.
 4. **Sweeps:** batch sizes, KV cache type, MoE expert offload, threads, at those depths.
@@ -35,7 +35,7 @@ npx skills add cliffkoome/tune-my-llm
 git clone https://github.com/cliffkoome/tune-my-llm ~/.agents/skills/tune-my-llm
 ln -s ~/.agents/skills/tune-my-llm ~/.claude/skills/tune-my-llm   # Claude Code
 ```
-Then ask your agent: *"Tune my local models for OpenCode"*.
+Then ask your agent: *"Tune my local models for OpenCode"*, or use a ready-made prompt from [`PROMPTS.md`](PROMPTS.md) (full tune, re-check after an update, add one model, diagnose a slow model, measure only).
 
 Without skill support: clone the repo, open your agent in it, and say *"Read SKILL.md and follow it."*
 
@@ -48,6 +48,7 @@ Without skill support: clone the repo, open your agent in it, and say *"Read SKI
 | Path | What |
 |---|---|
 | `SKILL.md` | The workflow your agent follows |
+| `PROMPTS.md` | Copy-paste prompts for common jobs |
 | `references/methodology.md` | Measuring at depth, agent compaction maths, the test ladder |
 | `references/flags.md` | What to set, what to sweep, router presets |
 | `references/backends.md` | Build recipes (CUDA, HIP, Vulkan, Metal, combined), AMD override table |

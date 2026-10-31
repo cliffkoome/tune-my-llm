@@ -76,6 +76,19 @@ Same 6 tasks, one run each, 30-minute limit:
 
 Tasks with long prompts finish about 2× faster; short tasks are dominated by generation and by run-to-run variation in how the model approaches them. Single runs, so treat differences under about 20% as noise.
 
+## Applying it: the real-server surprise
+Gemma-4 12B looked fine in llama-bench (d=28K: 222 / 26.8). Behind the live router with its vision encoder loaded, it read a 28K prompt at only 121 t/s: the mmproj pushed VRAM past 8 GB. The Vulkan-only build was even worse at 69 / 8.5 t/s. With `no-mmproj-offload = true` (encoder on CPU) it reached **212 / 24.3**, and images still took only 11–14 s.
+
+Live results after switching (through the router, long prompt):
+| Model | Device | Prompt | pp | tg | VRAM |
+|---|---|---|---|---|---|
+| Qwen3.6-35B-A3B | ROCm0 | 48.8K | 562 | 24.4 | 7.5 GB |
+| Gemma-4 12B | Vulkan0 | 27.7K | 211 | 24.3 | 8.0 GB |
+| Qwen2.5-7B | Vulkan0 | 21.2K | 506 | 40.5 | 6.7 GB |
+| Qwen2.5-Coder-3B | Vulkan0 | 15.9K | 1058 | 79.7 | 3.0 GB |
+
+Machine notes from `detect_hw.sh`: 2 × 16 GB DDR4-3200 (dual channel, ~51 GB/s), GPU link PCIe 4.0 x8 (the card's full width; the card itself reports x16).
+
 ## Final Qwen3.6 config
 `device = ROCm0`, `ngl 99`, `n-cpu-moe 34`, `c 65536`, `fa on`, `ub 2048`, `b 2048`, `ctk/ctv f16`, `t 8`, `np 1`.
 At 49K tokens: **pp 526 / tg 25.3**, against the original **pp 172 / tg 19.2** (Vulkan, ncmoe 33, ub 512, q8_0).
