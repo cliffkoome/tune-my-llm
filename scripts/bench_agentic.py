@@ -63,7 +63,7 @@ def run_opencode(workdir, prompt, alias, ctx, env, tmp):
     log = workdir / "agent.jsonl"
     with open(log, "w") as out, open(workdir / "agent.err", "w") as err:
         try:
-            subprocess.run([CFG.get("agent", {}).get("bin", "opencode"), "run", "--standalone", "-m", "bench/m",
+            subprocess.run([os.path.expanduser(CFG.get("agent", {}).get("bin", "opencode")), "run", "--standalone", "-m", "bench/m",
                             "--auto", "--format", "json", prompt],
                            cwd=workdir, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, timeout=TIMEOUT)
         except subprocess.TimeoutExpired:
@@ -99,16 +99,18 @@ def run_task(task, alias, ctx, keep_dir):
     env = {**os.environ, "CHECKS": str(AGENTIC / "checks")}
     if py_bin:
         env["PATH"] = f"{Path(py_bin).expanduser()}:{env['PATH']}"
-    t0 = time.time()
-    log = run(workdir, task["prompt"], alias, ctx, env, tmp)
-    wall = time.time() - t0
-    check = subprocess.run(["bash", "-c", task["check"]], cwd=workdir, env=env, capture_output=True)
-    res = {"wall_s": round(wall, 1), "passed": check.returncode == 0, **summarize(log)}
-    shutil.rmtree(keep_dir, ignore_errors=True)
-    keep_dir.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(workdir, keep_dir)
-    shutil.rmtree(tmp, ignore_errors=True)
-    return res
+    try:
+        t0 = time.time()
+        log = run(workdir, task["prompt"], alias, ctx, env, tmp)
+        wall = time.time() - t0
+        check = subprocess.run(["bash", "-c", task["check"]], cwd=workdir, env=env, capture_output=True)
+        res = {"wall_s": round(wall, 1), "passed": check.returncode == 0, **summarize(log)}
+        shutil.rmtree(keep_dir, ignore_errors=True)
+        keep_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(workdir, keep_dir)
+        return res
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():
